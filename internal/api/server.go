@@ -1,0 +1,297 @@
+package api
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis/v8"
+	"github.com/google/uuid"
+	"github.com/rayda/rayda-service/internal/api/handlers"
+	"github.com/rayda/rayda-service/internal/config"
+	"github.com/rayda/rayda-service/internal/database"
+	"github.com/rayda/rayda-service/internal/pkg/audit"
+	"github.com/rayda/rayda-service/internal/pkg/auth"
+	"github.com/rayda/rayda-service/internal/pkg/cache"
+	"github.com/rayda/rayda-service/internal/repository"
+	"gorm.io/gorm"
+)
+
+type Server struct {
+	config       *config.Config
+	httpServer   *http.Server
+	db           *gorm.DB
+	redisClient  *redis.Client
+	cache        cache.Cache
+	auditRepo    repository.AuditLogRepository
+}
+
+func NewServer(cfg *config.Config) (*Server, error) {
+	// Set Gin mode based on environment
+	if cfg.Server.Environment == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	} else {
+		gin.SetMode(gin.DebugMode)
+	}
+
+	// Initialize database connection
+	if err := database.Connect(cfg); err != nil {
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+
+	// Run migrations
+	if err := database.Migrate(); err != nil {
+		return nil, fmt.Errorf("failed to run migrations: %w", err)
+	}
+
+	db := database.DB
+
+	// Initialize Redis client for caching
+	redisAddr := fmt.Sprintf("%s:%d", cfg.Redis.Host, cfg.Redis.Port)
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:     redisAddr,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+	})
+
+	// Test Redis connection
+	if _, err := redisClient.Ping(context.Background()).Result(); err != nil {
+		return nil, fmt.Errorf("failed to connect to Redis: %w", err)
+	}
+
+	// Initialize cache if enabled
+	var cacheImpl cache.Cache
+	if cfg.Cache.Enabled {
+		// Use Redis cache in production, in-memory cache for development
+		if cfg.Server.Environment == "production" {
+			cacheImpl = cache.NewRedisCache(redisClient, cfg.Cache.Prefix)
+		} else {
+			cacheImpl = cache.NewInMemoryCache(cfg.Cache.Prefix)
+		}
+	} else {
+		// Use a no-op cache implementation when caching is disabled
+		cacheImpl = cache.NewNoOpCache()
+	}
+
+	// Default cache TTL
+	cacheTTL := 5 * time.Minute
+	if cfg.Cache.TTL > 0 {
+		cacheTTL = time.Duration(cfg.Cache.TTL) * time.Second
+	}
+
+	// Initialize repositories
+	auditRepo := repository.NewAuditLogRepository(db)
+
+	// Wrap with cached repository
+	cachedAuditRepo := repository.NewCachedAuditLogRepository(
+		auditRepo,
+		cacheImpl,
+		cacheTTL,
+	)
+
+	r := gin.Default()
+
+	// Add audit logging middleware
+	auditMiddleware := audit.Middleware(auditRepo, nil)
+	r.Use(auditMiddleware)
+
+	// Setup routes
+	setupRoutes(r, db, cachedAuditRepo)
+
+	// Create HTTP server
+	srv := &http.Server{
+		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
+		Handler:      r,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	return &Server{
+		config:      cfg,
+		httpServer:  srv,
+		db:          db,
+		redisClient: redisClient,
+		cache:       cacheImpl,
+		auditRepo:   cachedAuditRepo,
+	}, nil
+}
+
+func (s *Server) Start() error {
+	log.Printf("Server starting on port %d", s.config.Server.Port)
+	return s.httpServer.ListenAndServe()
+}
+
+func (s *Server) Shutdown(ctx context.Context) error {
+	// Close Redis connection
+	if s.redisClient != nil {
+		if err := s.redisClient.Close(); err != nil {
+			log.Printf("Error closing Redis client: %v", err)
+		}
+	}
+
+	// Shutdown HTTP server
+	log.Println("Server shutting down...")
+	return s.httpServer.Shutdown(ctx)
+}
+
+func setupRoutes(r *gin.Engine, db *gorm.DB, auditRepo repository.AuditLogRepository) {
+	// Initialize repositories
+	userRepo := repository.NewUserRepository(db)
+	orgRepo := repository.NewOrganizationRepository(db)
+
+	// Initialize services
+	authSvc := auth.NewService(
+		"your-secret-key-here", // TODO: Move to config
+		24*time.Hour,           // Access token expiry
+		7*24*time.Hour,         // Refresh token expiry
+	)
+
+	// Initialize handlers
+	authHandler := handlers.NewAuthHandler(authSvc, userRepo)
+	userHandler := handlers.NewUserHandler(userRepo)
+	orgHandler := handlers.NewOrganizationHandler(orgRepo)
+	auditLogHandler := handlers.NewAuditLogHandler(auditRepo)
+
+	// Health check endpoint
+	r.GET("/health", func(c *gin.Context) {
+		// Check database connection
+		db, err := db.DB()
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status":  "error",
+				"message": "database connection error",
+			})
+			return
+		}
+
+		if err := db.Ping(); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status":  "error",
+				"message": "database ping failed",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"status": "ok",
+			"time":   time.Now().UTC().Format(time.RFC3339),
+		})
+	})
+
+	// API v1 routes
+	v1 := r.Group("/api/v1")
+	{
+		// Auth routes (public)
+		auth := v1.Group("/auth")
+		{
+			auth.POST("/login", authHandler.Login)
+			auth.POST("/refresh", authHandler.RefreshToken)
+			auth.POST("/register", authHandler.Register)
+		}
+
+		// Protected routes (require authentication)
+		authorized := v1.Group("")
+		authorized.Use(authMiddleware())
+		{
+			// User routes
+			users := authorized.Group("/users")
+			{
+				users.GET("", userHandler.ListUsers)
+				users.POST("", userHandler.CreateUser)
+				users.GET("/:id", userHandler.GetUser)
+				users.PUT("/:id", userHandler.UpdateUser)
+				users.DELETE("/:id", userHandler.DeleteUser)
+			}
+
+			// Organization routes
+			orgs := authorized.Group("/organizations")
+			{
+				orgs.GET("", orgHandler.ListOrganizations)
+				orgs.POST("", orgHandler.CreateOrganization)
+				orgs.GET("/:id", orgHandler.GetOrganization)
+				orgs.PUT("/:id", orgHandler.UpdateOrganization)
+				orgs.DELETE("/:id", orgHandler.DeleteOrganization)
+			}
+
+			// Audit log routes
+			auditLogs := authorized.Group("/audit-logs")
+			{
+				auditLogs.GET("", auditLogHandler.ListAuditLogs)
+				auditLogs.GET("/:id", auditLogHandler.GetAuditLog)
+			}
+
+			// Webhook endpoints
+			webhooks := authorized.Group("/webhooks")
+			webhooks.Use(webhookAuthMiddleware())
+			{
+				// External service webhooks
+				webhooks.POST("/external/:provider", handleExternalWebhook)
+			}
+		}
+	}
+}
+
+// handleExternalWebhook handles incoming webhooks from external services
+func handleExternalWebhook(c *gin.Context) {
+	provider := c.Param("provider")
+	// TODO: Implement webhook handling logic for different providers
+	c.JSON(http.StatusNotImplemented, gin.H{
+		"error": "webhook handling not implemented for provider: " + provider,
+	})
+}
+
+// Middleware functions
+func authMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authorization header is required"})
+			c.Abort()
+			return
+		}
+
+		// Extract token from header (format: "Bearer <token>")
+		tokenString := ""
+		if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+			tokenString = authHeader[7:]
+		}
+
+		if tokenString == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid authorization header format"})
+			c.Abort()
+			return
+		}
+
+		// TODO: Validate JWT token and extract claims
+		// For now, just pass through with a placeholder user ID
+		userID := uuid.New()
+		tenantID := uuid.New()
+
+		// Add user and tenant to context
+		c.Set("userID", userID)
+		c.Set("tenantID", tenantID)
+
+		c.Next()
+	}
+}
+
+func webhookAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// TODO: Implement webhook signature validation
+		// For now, just verify the presence of an API key
+		apiKey := c.GetHeader("X-API-Key")
+		if apiKey == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "API key is required"})
+			c.Abort()
+			return
+		}
+
+		// TODO: Validate API key against database
+
+		c.Next()
+	}
+}
