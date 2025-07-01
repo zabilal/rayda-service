@@ -35,7 +35,16 @@ func (h *OrganizationHandler) RegisterRoutes(router *gin.RouterGroup, authMiddle
 	}
 }
 
-// ListOrganizations returns a list of organizations for the current tenant
+// @Summary List all organizations
+// @Description Get a list of organizations for the current tenant
+// @Tags organizations
+// @Accept  json
+// @Produce  json
+// @Security Bearer
+// @Success 200 {array} dto.OrganizationResponse
+// @Failure 401 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /organizations [get]
 func (h *OrganizationHandler) ListOrganizations(c *gin.Context) {
 	// In a real implementation, you would filter by the current user's tenant ID
 	// For now, we'll return all organizations
@@ -54,7 +63,18 @@ func (h *OrganizationHandler) ListOrganizations(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.ToOrganizationResponseList(orgPtrs))
 }
 
-// CreateOrganization creates a new organization
+// @Summary Create a new organization
+// @Description Create a new organization in the system
+// @Tags organizations
+// @Accept  json
+// @Produce  json
+// @Security Bearer
+// @Param   organization  body      dto.CreateOrganizationRequest  true  "Organization data"
+// @Success 201 {object} dto.OrganizationResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 401 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /organizations [post]
 func (h *OrganizationHandler) CreateOrganization(c *gin.Context) {
 	// Get current user's tenant ID (in a real app, you might have different permissions)
 	// For now, we'll just create the organization
@@ -88,7 +108,18 @@ func (h *OrganizationHandler) CreateOrganization(c *gin.Context) {
 	c.JSON(http.StatusCreated, dto.ToOrganizationResponse(org))
 }
 
-// GetOrganization returns an organization by ID
+// @Summary Get an organization by ID
+// @Description Get a single organization by its ID
+// @Tags organizations
+// @Accept  json
+// @Produce  json
+// @Security Bearer
+// @Param   id   path      string  true  "Organization ID"
+// @Success 200 {object} dto.OrganizationResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 401 {object} dto.ErrorResponse
+// @Failure 404 {object} dto.ErrorResponse
+// @Router /organizations/{id} [get]
 func (h *OrganizationHandler) GetOrganization(c *gin.Context) {
 	// Parse organization ID from URL
 	orgID, err := uuid.Parse(c.Param("id"))
@@ -107,7 +138,20 @@ func (h *OrganizationHandler) GetOrganization(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.ToOrganizationResponse(org))
 }
 
-// UpdateOrganization updates an organization
+// @Summary Update an organization
+// @Description Update an existing organization's information
+// @Tags organizations
+// @Accept  json
+// @Produce  json
+// @Security Bearer
+// @Param   id   path      string  true  "Organization ID"
+// @Param   organization  body      dto.UpdateOrganizationRequest  true  "Organization data"
+// @Success 200 {object} dto.OrganizationResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 401 {object} dto.ErrorResponse
+// @Failure 403 {object} dto.ErrorResponse
+// @Failure 404 {object} dto.ErrorResponse
+// @Router /organizations/{id} [put]
 func (h *OrganizationHandler) UpdateOrganization(c *gin.Context) {
 	// Parse organization ID from URL
 	orgID, err := uuid.Parse(c.Param("id"))
@@ -158,7 +202,19 @@ func (h *OrganizationHandler) UpdateOrganization(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.ToOrganizationResponse(org))
 }
 
-// DeleteOrganization deletes an organization
+// @Summary Delete an organization
+// @Description Delete an organization from the system
+// @Tags organizations
+// @Accept  json
+// @Produce  json
+// @Security Bearer
+// @Param   id   path      string  true  "Organization ID"
+// @Success 204 "No Content"
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 401 {object} dto.ErrorResponse
+// @Failure 403 {object} dto.ErrorResponse
+// @Failure 404 {object} dto.ErrorResponse
+// @Router /organizations/{id} [delete]
 func (h *OrganizationHandler) DeleteOrganization(c *gin.Context) {
 	// Parse organization ID from URL
 	orgID, err := uuid.Parse(c.Param("id"))

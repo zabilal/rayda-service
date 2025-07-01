@@ -153,6 +153,19 @@ func (h *AuditLogHandler) ListAuditLogs(c *gin.Context) {
 }
 
 // GetAuditLog returns a specific audit log by ID
+// @Summary Get an audit log by ID
+// @Description Get detailed information about a specific audit log entry
+// @Tags audit-logs
+// @Accept  json
+// @Produce  json
+// @Security Bearer
+// @Param   id   path      string  true  "Audit Log ID"
+// @Success 200 {object} dto.AuditLogResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 401 {object} dto.ErrorResponse
+// @Failure 403 {object} dto.ErrorResponse
+// @Failure 404 {object} dto.ErrorResponse
+// @Router /audit-logs/{id} [get]
 func (h *AuditLogHandler) GetAuditLog(c *gin.Context) {
 	// Get tenant ID from context
 	tenantID, err := getTenantIDFromContext(c)

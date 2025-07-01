@@ -35,7 +35,17 @@ func (h *AuthHandler) RegisterRoutes(router *gin.RouterGroup) {
 	}
 }
 
-// Login handles user login
+// @Summary User login
+// @Description Authenticate a user and return access & refresh tokens
+// @Tags auth
+// @Accept  json
+// @Produce  json
+// @Param   credentials  body      dto.LoginRequest  true  "Login credentials"
+// @Success 200 {object} dto.LoginResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 401 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /auth/login [post]
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req dto.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -74,7 +84,17 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.NewAuthResponse(tokenPair, user, h.authSvc.AccessExpiry()))
 }
 
-// Register handles user registration
+// @Summary Register a new user
+// @Description Register a new user account
+// @Tags auth
+// @Accept  json
+// @Produce  json
+// @Param   user  body      dto.RegisterRequest  true  "User registration data"
+// @Success 201 {object} dto.UserResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 409 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /auth/register [post]
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req dto.RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -128,7 +148,17 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	c.JSON(http.StatusCreated, dto.NewAuthResponse(tokenPair, user, h.authSvc.AccessExpiry()))
 }
 
-// RefreshToken handles token refresh
+// @Summary Refresh access token
+// @Description Get a new access token using a refresh token
+// @Tags auth
+// @Accept  json
+// @Produce  json
+// @Security Bearer
+// @Param   refreshToken  body      dto.RefreshTokenRequest  true  "Refresh token"
+// @Success 200 {object} dto.LoginResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 401 {object} dto.ErrorResponse
+// @Router /auth/refresh [post]
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	var req dto.RefreshTokenRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -171,7 +201,16 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.NewAuthResponse(tokenPairDTO, user, h.authSvc.AccessExpiry()))
 }
 
-// GetCurrentUser returns the current authenticated user
+// @Summary Get current user
+// @Description Get the currently authenticated user's information
+// @Tags auth
+// @Accept  json
+// @Produce  json
+// @Security Bearer
+// @Success 200 {object} dto.UserResponse
+// @Failure 401 {object} dto.ErrorResponse
+// @Failure 404 {object} dto.ErrorResponse
+// @Router /auth/me [get]
 func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 	// Get user ID from context
 	userID, err := auth.GetCurrentUserID(c.Request.Context())

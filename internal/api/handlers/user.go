@@ -37,6 +37,16 @@ func (h *UserHandler) RegisterRoutes(router *gin.RouterGroup, authMiddleware gin
 }
 
 // ListUsers returns a list of users for the current tenant
+// @Summary List all users
+// @Description Get a list of users for the current tenant
+// @Tags users
+// @Accept  json
+// @Produce  json
+// @Security Bearer
+// @Success 200 {array} dto.UserResponse
+// @Failure 401 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /users [get]
 func (h *UserHandler) ListUsers(c *gin.Context) {
 	// Get tenant ID from context
 	tenantID, err := auth.GetCurrentTenantID(c.Request.Context())
@@ -62,6 +72,19 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 }
 
 // CreateUser creates a new user
+// @Summary Create a new user
+// @Description Create a new user in the system
+// @Tags users
+// @Accept  json
+// @Produce  json
+// @Security Bearer
+// @Param user body dto.CreateUserRequest true "User data"
+// @Success 201 {object} dto.UserResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 401 {object} dto.ErrorResponse
+// @Failure 409 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /users [post]
 func (h *UserHandler) CreateUser(c *gin.Context) {
 	// Get tenant ID from context
 	tenantID, err := auth.GetCurrentTenantID(c.Request.Context())
@@ -107,6 +130,19 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 }
 
 // GetUser returns a user by ID
+// @Summary Get a user by ID
+// @Description Get a single user by their ID
+// @Tags users
+// @Accept  json
+// @Produce  json
+// @Security Bearer
+// @Param id path string true "User ID"
+// @Success 200 {object} dto.UserResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 401 {object} dto.ErrorResponse
+// @Failure 403 {object} dto.ErrorResponse
+// @Failure 404 {object} dto.ErrorResponse
+// @Router /users/{id} [get]
 func (h *UserHandler) GetUser(c *gin.Context) {
 	// Get tenant ID from context
 	tenantID, err := auth.GetCurrentTenantID(c.Request.Context())
@@ -139,6 +175,21 @@ func (h *UserHandler) GetUser(c *gin.Context) {
 }
 
 // UpdateUser updates a user
+// @Summary Update a user
+// @Description Update an existing user's information
+// @Tags users
+// @Accept  json
+// @Produce  json
+// @Security Bearer
+// @Param id path string true "User ID"
+// @Param user body dto.UpdateUserRequest true "User data"
+// @Success 200 {object} dto.UserResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 401 {object} dto.ErrorResponse
+// @Failure 403 {object} dto.ErrorResponse
+// @Failure 404 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /users/{id} [put]
 func (h *UserHandler) UpdateUser(c *gin.Context) {
 	// Get tenant ID from context
 	tenantID, err := auth.GetCurrentTenantID(c.Request.Context())
@@ -206,6 +257,20 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 }
 
 // DeleteUser deletes a user
+// @Summary Delete a user
+// @Description Delete a user from the system
+// @Tags users
+// @Accept  json
+// @Produce  json
+// @Security Bearer
+// @Param id path string true "User ID"
+// @Success 204 "No Content"
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 401 {object} dto.ErrorResponse
+// @Failure 403 {object} dto.ErrorResponse
+// @Failure 404 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /users/{id} [delete]
 func (h *UserHandler) DeleteUser(c *gin.Context) {
 	// Get tenant ID from context
 	tenantID, err := auth.GetCurrentTenantID(c.Request.Context())

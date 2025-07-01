@@ -26,6 +26,16 @@ type RefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
 }
 
+// LoginResponse represents the response for login and token refresh operations
+// @Description Contains authentication tokens and user information
+type LoginResponse struct {
+	AccessToken  string    `json:"access_token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`
+	RefreshToken string    `json:"refresh_token,omitempty" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`
+	ExpiresIn    int64     `json:"expires_in" example:"3600"`
+	TokenType    string    `json:"token_type" example:"Bearer"`
+	User         *UserInfo `json:"user"`
+}
+
 // AuthResponse represents the authentication response
 type AuthResponse struct {
 	AccessToken  string    `json:"access_token"`
